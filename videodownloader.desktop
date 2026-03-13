@@ -1,0 +1,14 @@
+[Desktop Entry]
+Version=1.1.2
+Type=Application
+Name=Video Downloader
+Name[de]=Video Downloader
+Comment=Videos herunterladen mit yt-dlp
+Comment[en]=Download videos using yt-dlp
+Comment[de]=Videos herunterladen mit yt-dlp
+Exec=/home/helle/stuff/Video-Downloader/videodownloader.sh
+Icon=/home/helle/stuff/Video-Downloader/icon.png
+Terminal=false
+Categories=AudioVideo;Network;
+Keywords=youtube;video;download;yt-dlp;
+StartupNotify=true
