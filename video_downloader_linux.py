@@ -1,8 +1,8 @@
 #   - Video Downloader mit yt-dlp (Python-Modul) + Tkinter
 #   - Copyright 2026 by Lars Kuehn
-#   - Version 1.1.2-linux (13.03.2026)
+#   - Version 1.1.3-linux (09.06.2026)
 #   - Licensed under the MIT License
-#   - https://github.com/1Bln21/VideoDownloader
+#   - https://github.com/1Bln21/Video_Downloader-Linux
 #   - Zielplattform: Linux (CachyOS / Arch)
 #   - Voraussetzungen:
 #       sudo pacman -S yt-dlp ffmpeg tk
@@ -14,12 +14,13 @@ from tkinter import ttk
 import threading
 import os
 import shutil
+import subprocess
 
 import yt_dlp
 
 
 APP_NAME      = "Video Downloader"
-APP_VERSION   = "1.1.2-linux"
+APP_VERSION   = "1.1.3-linux"
 APP_COPYRIGHT = "Copyright 2026 by Lars Kuehn"
 
 
@@ -551,7 +552,6 @@ def resolve_smb_path(raw: str) -> str | None:
     gio = shutil.which("gio")
     if gio:
         try:
-            import subprocess
             subprocess.run(
                 [gio, "mount", f"smb://{server}/{share}"],
                 timeout=15,
@@ -918,6 +918,9 @@ def download_queue():
         return
 
     ffmpeg_path      = find_ffmpeg()
+    if not ffmpeg_path:
+        messagebox.showwarning(t("warn_title"), t("warn_no_ffmpeg"))
+
     selected_browser = browser_var.get()
     cookie_file      = cookie_file_var.get().strip()
 
@@ -936,7 +939,7 @@ def download_queue():
             return
 
     fmt_info = next((f for f in FORMATS if f["key"] == format_var.get()), FORMATS[0])
-    urls     = list(_url_queue)   # Snapshot – Queue bleibt editierbar bis Start
+    urls     = list(_url_queue)   # Snapshot der zu ladenden URLs
     total    = len(urls)
 
     _cancelled        = False
@@ -946,6 +949,10 @@ def download_queue():
     set_status("status_analyzing")
     item_var.set("")
     btn_download.config(text=t("btn_cancel"), command=cancel_download)
+    # Queue während des Downloads sperren – sonst laufen Listbox-Indizes
+    # und der urls-Snapshot auseinander.
+    for _b in (btn_queue_add, btn_queue_remove, btn_queue_clear, btn_toggle_queue):
+        _b.config(state="disabled")
     root.update_idletasks()
 
     outtmpl = os.path.join(download_path, "%(title).150B [%(id)s].%(ext)s")
@@ -970,11 +977,14 @@ def download_queue():
                 item_var.set("")
             root.after(0, _highlight)
 
-            state = {"current_title": ""}
+            state = {"current_title": "", "finished": 0}
 
-            def progress_hook(d: dict, _i=i, _total=total):
+            def progress_hook(d: dict, _i=i, _total=total, _state=state):
                 if _cancelled:
                     raise _CancelledError()
+                if d["status"] == "finished":
+                    _state["finished"] += 1
+                    return
                 if d["status"] != "downloading":
                     return
                 info  = d.get("info_dict", {})
@@ -992,6 +1002,7 @@ def download_queue():
                     item_var.set(ct)
                 root.after(0, _ui)
 
+            logger = _ErrorLogger()
             ydl_opts: dict = {
                 "format":            fmt_info["fmt"],
                 "outtmpl":           outtmpl,
@@ -1003,6 +1014,7 @@ def download_queue():
                 "quiet":             True,
                 "no_warnings":       True,
                 "progress_hooks":    [progress_hook],
+                "logger":            logger,
             }
             if fmt_info["merge"] == "mp3":
                 ydl_opts["postprocessors"] = [{
@@ -1022,14 +1034,20 @@ def download_queue():
             was_error = False
             try:
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                    ydl.download([url])
-                done_count += 1
+                    # ignoreerrors=True → kein Throw bei Fehler, nur Return-Code.
+                    ret_code = ydl.download([url])
+                if ret_code != 0 and state["finished"] == 0:
+                    was_error = True
             except _CancelledError:
                 _cancelled = True
                 break
             except Exception:
-                error_count += 1
                 was_error = True
+
+            if was_error:
+                error_count += 1
+            else:
+                done_count += 1
 
             # Abgearbeiteten Eintrag in der Listbox durchstreichen (grau)
             def _mark_done(idx=i - 1, ok=not was_error):
@@ -1040,6 +1058,8 @@ def download_queue():
             global _download_running
             _download_running = False
             btn_download.config(text=t("btn_queue_download"), command=download_queue)
+            for _b in (btn_queue_add, btn_queue_remove, btn_queue_clear, btn_toggle_queue):
+                _b.config(state="normal")
             queue_listbox.selection_clear(0, tk.END)
             item_var.set("")
             if _cancelled:
@@ -1128,6 +1148,31 @@ class _CancelledError(Exception):
     pass
 
 
+class _ErrorLogger:
+    """
+    Sammelt yt-dlp-Fehlermeldungen.
+
+    Notwendig, weil mit ``ignoreerrors=True`` ein fehlgeschlagener Download
+    keine Exception wirft – ohne diesen Logger bliebe ein Fehler unsichtbar
+    und die App meldete fälschlich „Fertig.".
+    """
+    def __init__(self):
+        self.errors: list[str] = []
+
+    def debug(self, msg):
+        pass
+
+    def info(self, msg):
+        pass
+
+    def warning(self, msg):
+        pass
+
+    def error(self, msg):
+        if msg:
+            self.errors.append(str(msg))
+
+
 def download_video():
     global _download_running, _cancelled
 
@@ -1202,6 +1247,7 @@ def download_video():
             "current_item":  0,
             "total_items":   0,
             "current_title": "",
+            "finished":      0,   # Anzahl vollständig geladener Dateien
         }
 
         # ── Progress-Hook ─────────────────────────────────
@@ -1210,6 +1256,10 @@ def download_video():
         def progress_hook(d: dict):
             if _cancelled:
                 raise _CancelledError()
+
+            if d["status"] == "finished":
+                state["finished"] += 1
+                return
 
             if d["status"] != "downloading":
                 return
@@ -1250,6 +1300,7 @@ def download_video():
             root.after(0, _ui_update)
 
         # ── yt-dlp Optionen zusammenbauen ─────────────────
+        logger = _ErrorLogger()
         ydl_opts: dict = {
             "format":            fmt_info["fmt"],
             "outtmpl":           outtmpl,
@@ -1261,6 +1312,7 @@ def download_video():
             "quiet":             True,
             "no_warnings":       True,
             "progress_hooks":    [progress_hook],
+            "logger":            logger,
         }
 
         if fmt_info["merge"] == "mp3":
@@ -1283,16 +1335,25 @@ def download_video():
         # ── Download ausführen ────────────────────────────
         error_msg     = ""
         was_cancelled = False
+        ret_code      = 0
 
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                ydl.download([url])
+                # Wegen ignoreerrors=True wirft download() bei Fehlern keine
+                # Exception, sondern liefert einen Return-Code != 0 zurück.
+                ret_code = ydl.download([url])
         except _CancelledError:
             was_cancelled = True
         except Exception as ex:
             error_msg = str(ex)
 
         total_items = state["total_items"]
+        finished    = state["finished"]
+        logged_err  = "\n".join(logger.errors)
+
+        # Fehlschlag, wenn eine Exception kam ODER yt-dlp einen Fehler-Code
+        # lieferte und dabei keine einzige Datei vollständig geladen wurde.
+        is_failure = bool(error_msg) or (ret_code != 0 and finished == 0)
 
         # ── UI nach Abschluss ─────────────────────────────
         def done_ui():
@@ -1306,13 +1367,17 @@ def download_video():
                 set_status("status_cancelled")
                 return
 
-            if error_msg:
+            if is_failure:
                 progress_var.set(0)
                 set_status("status_error")
-                if "Could not copy" in error_msg and "cookie database" in error_msg:
+                detail = error_msg or logged_err
+                if "Could not copy" in detail and "cookie database" in detail:
                     messagebox.showerror(t("err_cookie_locked_title"), t("err_cookie_locked"))
                 else:
-                    messagebox.showerror(t("err_download_title"), error_msg[-1500:])
+                    messagebox.showerror(
+                        t("err_download_title"),
+                        detail[-1500:] if detail else t("status_error"),
+                    )
                 return
 
             progress_var.set(100)
