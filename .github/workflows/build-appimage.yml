@@ -1,0 +1,116 @@
+name: Build AppImage
+
+# Baut ein eigenständiges x86_64-AppImage (Python + Tkinter + yt-dlp + ffmpeg
+# gebündelt) und hängt es an ein GitHub-Release.
+#
+# Auslöser:
+#   - Push eines Tags v*        → baut und hängt an das gleichnamige Release
+#   - Manuell (workflow_dispatch) → Tag als Eingabe wählen (z. B. v1.1.3)
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release-Tag, an das das AppImage gehängt wird (z. B. v1.1.3)"
+        required: true
+        default: "v1.1.3"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    # Ubuntu 22.04 → älteres glibc = breitere Kompatibilität des AppImage.
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref_name }}
+
+      - name: Systemabhängigkeiten installieren
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            python3 python3-pip python3-tk python3-dev \
+            librsvg2-bin file desktop-file-utils wget
+
+      - name: Python-Build-Abhängigkeiten
+        run: |
+          python3 -m pip install --upgrade pip
+          python3 -m pip install pyinstaller yt-dlp
+
+      - name: App mit PyInstaller bündeln
+        run: |
+          pyinstaller --noconfirm --clean \
+            --name videodownloader \
+            --windowed \
+            --collect-all yt_dlp \
+            video_downloader_linux.py
+
+      - name: Statisches ffmpeg/ffprobe holen
+        run: |
+          wget -q https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz
+          tar xf ffmpeg-release-amd64-static.tar.xz
+          mkdir -p ffbin
+          cp ffmpeg-*-amd64-static/ffmpeg  ffbin/
+          cp ffmpeg-*-amd64-static/ffprobe ffbin/
+
+      - name: AppDir zusammenstellen
+        run: |
+          APPDIR=AppDir
+          mkdir -p "$APPDIR/usr/bin"
+
+          # PyInstaller-Onedir-Ausgabe + ffmpeg/ffprobe nach usr/bin
+          cp -r dist/videodownloader/* "$APPDIR/usr/bin/"
+          cp ffbin/ffmpeg ffbin/ffprobe "$APPDIR/usr/bin/"
+          chmod +x "$APPDIR/usr/bin/ffmpeg" "$APPDIR/usr/bin/ffprobe"
+
+          # Icon rendern (256x256)
+          rsvg-convert -w 256 -h 256 packaging/icon.svg -o "$APPDIR/videodownloader.png"
+          cp "$APPDIR/videodownloader.png" "$APPDIR/.DirIcon"
+
+          # Desktop-Eintrag
+          cat > "$APPDIR/videodownloader.desktop" <<'DESKTOP'
+          [Desktop Entry]
+          Type=Application
+          Name=Video Downloader
+          Comment=Download videos using yt-dlp
+          Exec=videodownloader
+          Icon=videodownloader
+          Categories=AudioVideo;Network;
+          Keywords=youtube;video;download;yt-dlp;
+          Terminal=false
+          DESKTOP
+          desktop-file-validate "$APPDIR/videodownloader.desktop"
+
+          # AppRun – setzt PATH, damit ffmpeg (shutil.which) gefunden wird
+          cat > "$APPDIR/AppRun" <<'APPRUN'
+          #!/bin/bash
+          HERE="$(dirname "$(readlink -f "${0}")")"
+          export PATH="${HERE}/usr/bin:${PATH}"
+          exec "${HERE}/usr/bin/videodownloader" "$@"
+          APPRUN
+          chmod +x "$APPDIR/AppRun"
+
+      - name: appimagetool holen und AppImage bauen
+        run: |
+          wget -q https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod +x appimagetool-x86_64.AppImage
+          ARCH=x86_64 ./appimagetool-x86_64.AppImage --appimage-extract-and-run \
+            AppDir Video_Downloader-Linux-x86_64.AppImage
+
+      - name: AppImage als Build-Artefakt sichern
+        uses: actions/upload-artifact@v4
+        with:
+          name: Video_Downloader-Linux-x86_64.AppImage
+          path: Video_Downloader-Linux-x86_64.AppImage
+
+      - name: An Release anhängen
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          files: Video_Downloader-Linux-x86_64.AppImage

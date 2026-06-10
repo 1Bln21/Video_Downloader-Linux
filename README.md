@@ -52,6 +52,21 @@ chmod +x videodownloader.sh
 python video_downloader_linux.py
 ```
 
+### AppImage (no installation, no dependencies)
+
+Grab the ready-to-run **`Video_Downloader-Linux-x86_64.AppImage`** from the
+[latest release](https://github.com/1Bln21/Video_Downloader-Linux/releases/latest).
+Python, Tkinter, yt-dlp and ffmpeg are all bundled — nothing to install:
+
+```bash
+chmod +x Video_Downloader-Linux-x86_64.AppImage
+./Video_Downloader-Linux-x86_64.AppImage
+```
+
+> The bundled yt-dlp is frozen at build time. Because sites like YouTube change
+> often, grab a newer AppImage (or use the source install above) if downloads
+> start failing.
+
 ### Add to App Launcher (optional, but recommended)
 
 ```bash
@@ -124,6 +139,21 @@ cd VideoDownloader-Linux
 chmod +x videodownloader.sh
 python video_downloader_linux.py
 ```
+
+### AppImage (ohne Installation, ohne Abhängigkeiten)
+
+Lade die fertige **`Video_Downloader-Linux-x86_64.AppImage`** aus dem
+[neuesten Release](https://github.com/1Bln21/Video_Downloader-Linux/releases/latest).
+Python, Tkinter, yt-dlp und ffmpeg sind bereits enthalten — nichts zu installieren:
+
+```bash
+chmod +x Video_Downloader-Linux-x86_64.AppImage
+./Video_Downloader-Linux-x86_64.AppImage
+```
+
+> Das gebündelte yt-dlp ist zum Build-Zeitpunkt eingefroren. Da sich Seiten wie
+> YouTube häufig ändern, lade bei Problemen ein neueres AppImage (oder nutze die
+> Quellinstallation oben).
 
 ### In den App-Launcher eintragen (optional, aber empfehlenswert)
 

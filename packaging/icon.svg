@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#6d28d9"/>
+      <stop offset="1" stop-color="#4f1d96"/>
+    </linearGradient>
+  </defs>
+  <rect x="8" y="8" width="240" height="240" rx="52" fill="url(#bg)"/>
+  <!-- Play-Dreieck -->
+  <path d="M104 84 L104 156 L168 120 Z" fill="#ffffff"/>
+  <!-- Download-Pfeil -->
+  <g fill="#ffffff">
+    <rect x="118" y="170" width="20" height="34" rx="4"/>
+    <path d="M98 196 L158 196 L128 230 Z"/>
+  </g>
+</svg>
