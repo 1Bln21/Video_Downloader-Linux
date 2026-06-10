@@ -26,10 +26,11 @@ jobs:
     runs-on: ubuntu-22.04
 
     steps:
+      # Wir bauen aus dem auslösenden Commit (Tag-Push: der Tag selbst;
+      # workflow_dispatch: main). So sind die Packaging-Dateien (icon.svg,
+      # AppRun-Vorlagen) immer vorhanden – ältere Tags enthalten sie ggf. nicht.
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.inputs.tag || github.ref_name }}
 
       - name: Systemabhängigkeiten installieren
         run: |
