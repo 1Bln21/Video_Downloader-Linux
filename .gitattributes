@@ -1,0 +1,11 @@
+# Erzwinge LF für ausführbare/Skript-Dateien, damit sie auf Linux-Runnern
+# (GitHub Actions) und im AppImage-Build nicht durch CRLF brechen.
+*.sh   text eol=lf
+*.py   text eol=lf
+*.yml  text eol=lf
+*.yaml text eol=lf
+*.svg  text eol=lf
+*.desktop text eol=lf
+
+*.png  binary
+*.AppImage binary
